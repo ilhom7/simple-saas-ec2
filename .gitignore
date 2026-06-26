@@ -1,0 +1,6 @@
+keys/simple-saas-ec2
+.terraform/
+*.tfstate
+*.tfstate.*
+.DS_Store
+node_modules/
