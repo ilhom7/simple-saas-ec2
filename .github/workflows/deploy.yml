@@ -18,6 +18,20 @@ jobs:
             - name: Configure SSH key
               run: |
                 mkdir -p ~/.ssh
+                if [ -z "${{ secrets.EC2_HOST }}" ]; then
+                    echo "EC2_HOST secret is missing or empty"
+                    exit 1
+                fi
+
+                if [ -z "${{ secrets.EC2_USER }}" ]; then
+                    echo "EC2_USER secret is missing or empty"
+                    exit 1
+                fi
+
+                if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then
+                    echo "EC2_SSH_KEY secret is missing or empty"
+                    exit 1
+                fi
                 echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
                 chmod 600 ~/.ssh/ec2_key
                 ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
