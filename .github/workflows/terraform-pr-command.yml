@@ -1,0 +1,112 @@
+name: Terraform PR Command
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: terraform-simple-saas-ec2
+  cancel-in-progress: false
+
+jobs:
+  terraform-command:
+    if: >
+      github.event.issue.pull_request &&
+      (
+        contains(github.event.comment.body, '/terraform apply') ||
+        contains(github.event.comment.body, '/terraform destroy confirm')
+      ) &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get PR branch info
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.issue.number }}"
+
+          HEAD_REF=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
+
+          echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+
+          echo "PR branch: $HEAD_REF"
+          echo "PR SHA: $HEAD_SHA"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: infra
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: contains(github.event.comment.body, '/terraform apply')
+        working-directory: infra
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: contains(github.event.comment.body, '/terraform apply')
+        working-directory: infra
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Destroy Plan
+        if: contains(github.event.comment.body, '/terraform destroy confirm')
+        working-directory: infra
+        run: terraform plan -destroy -out=tfdestroyplan
+
+      - name: Terraform Destroy Apply
+        if: contains(github.event.comment.body, '/terraform destroy confirm')
+        working-directory: infra
+        run: terraform apply -auto-approve tfdestroyplan
+
+      - name: Comment success on PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.event.comment.body }}" == *"/terraform destroy confirm"* ]]; then
+            MESSAGE="Terraform destroy completed successfully from GitHub Actions."
+          else
+            MESSAGE="Terraform apply completed successfully from GitHub Actions."
+          fi
+
+          gh pr comment ${{ github.event.issue.number }} --body "$MESSAGE"
+
+      - name: Comment failure on PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.issue.number }} \
+            --body "Terraform command failed. Check the GitHub Actions logs."
