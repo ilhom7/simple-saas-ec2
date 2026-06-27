@@ -1,0 +1,76 @@
+name: Terraform Destroy From PR Comment
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: terraform-simple-saas-ec2
+  cancel-in-progress: false
+
+jobs:
+  terraform-destroy:
+    if: >
+      github.event.issue.pull_request &&
+      github.event.comment.body == '/terraform destroy confirm' &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout PR branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr checkout ${{ github.event.issue.number }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Destroy Plan
+        working-directory: infra
+        run: terraform plan -destroy -out=tfdestroyplan
+
+      - name: Terraform Destroy Apply
+        working-directory: infra
+        run: terraform apply -auto-approve tfdestroyplan
+
+      - name: Comment success on PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.issue.number }} \
+            --body "Terraform destroy completed successfully from GitHub Actions."
+
+      - name: Comment failure on PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.issue.number }} \
+            --body "Terraform destroy failed. Check the GitHub Actions logs."
