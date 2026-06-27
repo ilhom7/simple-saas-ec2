@@ -39,8 +39,15 @@ jobs:
         run: |
           PR_NUMBER="${{ github.event.issue.number }}"
 
-          HEAD_REF=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
-          HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
+          HEAD_REF=$(gh pr view "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --json headRefName \
+            --jq '.headRefName')
+
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --json headRefOid \
+            --jq '.headRefOid')
 
           echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
           echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
@@ -101,12 +108,15 @@ jobs:
             MESSAGE="Terraform apply completed successfully from GitHub Actions."
           fi
 
-          gh pr comment ${{ github.event.issue.number }} --body "$MESSAGE"
+          gh pr comment "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --body "$MESSAGE"
 
       - name: Comment failure on PR
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr comment ${{ github.event.issue.number }} \
+          gh pr comment "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
             --body "Terraform command failed. Check the GitHub Actions logs."
