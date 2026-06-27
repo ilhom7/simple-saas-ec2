@@ -1,50 +1,70 @@
 name: Deploy App to EC2
 
 on:
-    push:
-        branches:
-            - main
-        paths:
-            - "app/**"
-            - ".github/workflows/deploy.yml"
+  push:
+    branches:
+      - main
+      - "feat/**"
+    paths:
+      - "app/**"
+      - ".github/workflows/deploy.yml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-simple-saas-ec2
+  cancel-in-progress: false
+
 jobs:
-    deploy:
-        runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Configure SSH key
-              run: |
-                mkdir -p ~/.ssh
-                if [ -z "${{ secrets.EC2_HOST }}" ]; then
-                    echo "EC2_HOST secret is missing or empty"
-                    exit 1
-                fi
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
 
-                if [ -z "${{ secrets.EC2_USER }}" ]; then
-                    echo "EC2_USER secret is missing or empty"
-                    exit 1
-                fi
+          if [ -z "${{ secrets.EC2_HOST }}" ]; then
+              echo "EC2_HOST secret is missing or empty"
+              exit 1
+          fi
 
-                if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then
-                    echo "EC2_SSH_KEY secret is missing or empty"
-                    exit 1
-                fi
-                echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
-                chmod 600 ~/.ssh/ec2_key
-                ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          if [ -z "${{ secrets.EC2_USER }}" ]; then
+              echo "EC2_USER secret is missing or empty"
+              exit 1
+          fi
 
-            - name: Copy app files to EC2
-              run: |
-                scp -i ~/.ssh/ec2_key -r app/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/opt/simple-saas-ec2/
+          if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then
+              echo "EC2_SSH_KEY secret is missing or empty"
+              exit 1
+          fi
 
-            - name: Restart app on EC2
-              run: |
-                ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-                    cd /opt/simple-saas-ec2
-                    docker compose down || true
-                    docker compose up -d --build
-                    docker ps
-                EOF
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy app files to EC2
+        run: |
+          scp -i ~/.ssh/ec2_key -r app/* \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/opt/simple-saas-ec2/
+
+      - name: Restart app on EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+              cd /opt/simple-saas-ec2
+              docker compose down || true
+              docker compose up -d --build
+              docker ps
+          EOF
+
+      - name: Smoke test app
+        run: |
+          if [ -n "${{ secrets.APP_URL }}" ]; then
+            curl -f "${{ secrets.APP_URL }}/health"
+          else
+            curl -f "http://${{ secrets.EC2_HOST }}/health"
+          fi
