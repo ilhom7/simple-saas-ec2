@@ -4,6 +4,7 @@ on:
     push:
         branches:
             - main
+            - "feat/**"
         paths:
             - "infra/**"
             - ".github/workflows/terraform-checks.yml"
@@ -14,6 +15,11 @@ on:
         paths:
             - "infra/**"
             - ".github/workflows/terraform-checks.yml"
+
+permissions:
+    id-token: write
+    contents: write
+    pull-requests: write
 
 jobs:
     terraform-checks:
@@ -26,15 +32,41 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
+              with: 
+                ref: ${{ github.head_ref || github.ref_name }}
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v5
+              with:
+                role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+                aws-region: us-east-2
 
             - name: Setup Terraform
               uses: hashicorp/setup-terraform@v3
 
-            - name: Terraform Format Check
-              run: terraform fmt -check -recursive
+            - name: Auto-format Terraform files
+              run: terraform fmt -recursive
+            
+            - name: Commit Terraform formatting changes
+              run: |
+                cd ..
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+
+                if git diff --quiet; then
+                  echo "No Terraform formatting changes needed."
+                else
+                  git add infra/
+                  git commit -m "Auto-format Terraform files"
+                  git push
+                fi
+            
 
             - name: Terraform Init
               run: terraform init
 
             - name: Terraform Validate
               run: terraform validate
+
+            - name: Terraform Plan
+              run: terraform plan

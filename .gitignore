@@ -4,3 +4,4 @@ keys/simple-saas-ec2
 *.tfstate.*
 .DS_Store
 node_modules/
+state-backups/
