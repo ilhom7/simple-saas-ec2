@@ -15,6 +15,10 @@ on:
             - "infra/**"
             - ".github/workflows/terraform-checks.yml"
 
+permissions:
+    id-token: write
+    contents: read
+
 jobs:
     terraform-checks:
         runs-on: ubuntu-latest
