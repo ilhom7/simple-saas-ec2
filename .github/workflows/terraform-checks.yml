@@ -1,0 +1,40 @@
+name: Terraform Checks
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - "infra/**"
+            - ".github/workflows/terraform-checks.yml"
+
+    pull_request:
+        branches:
+            - main
+        paths:
+            - "infra/**"
+            - ".github/workflows/terraform-checks.yml"
+
+jobs:
+    terraform-checks:
+        runs-on: ubuntu-latest
+
+        defaults:
+            run:
+                working-directory: infra
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+
+            - name: Terraform Format Check
+              run: terraform fmt -check -recursive
+
+            - name: Terraform Init
+              run: terraform init
+
+            - name: Terraform Validate
+              run: terraform validate

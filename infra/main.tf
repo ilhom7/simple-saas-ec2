@@ -203,3 +203,27 @@ resource "aws_lb_target_group_attachment" "app" {
   target_id        = aws_instance.app.id
   port             = 3000
 }
+
+resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_targets" {
+  alarm_name          = "${local.name}-alb-unhealthy_targets"
+  alarm_description   = "Alarm when ALB target group has unhealthy targets"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  threshold           = 1
+  period              = 60
+  statistic           = "Average"
+
+  namespace   = "AWS/ApplicationELB"
+  metric_name = "UnHealthyHostCount"
+
+  dimensions = {
+    LoadBalancer = aws_lb.app.arn_suffix
+    TargetGroup  = aws_lb_target_group.app.arn_suffix
+  }
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${local.name}-alb-unhealthy-targets"
+  }
+}
