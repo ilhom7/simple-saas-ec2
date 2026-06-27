@@ -10,6 +10,7 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  statuses: write
 
 concurrency:
   group: terraform-simple-saas-ec2
@@ -55,6 +56,18 @@ jobs:
           echo "PR branch: $HEAD_REF"
           echo "PR SHA: $HEAD_SHA"
 
+      - name: Set PR status to pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${{ github.repository }}/statuses/${{ steps.pr.outputs.head_sha }}" \
+            -f state="pending" \
+            -f context="Terraform PR Command" \
+            -f description="Terraform command is running..." \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
@@ -96,6 +109,32 @@ jobs:
         if: contains(github.event.comment.body, '/terraform destroy confirm')
         working-directory: infra
         run: terraform apply -auto-approve tfdestroyplan
+
+      - name: Set PR status to success
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${{ github.repository }}/statuses/${{ steps.pr.outputs.head_sha }}" \
+            -f state="success" \
+            -f context="Terraform PR Command" \
+            -f description="Terraform command completed successfully." \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Set PR status to failure
+        if: failure() && steps.pr.outputs.head_sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${{ github.repository }}/statuses/${{ steps.pr.outputs.head_sha }}" \
+            -f state="failure" \
+            -f context="Terraform PR Command" \
+            -f description="Terraform command failed. Check the workflow logs." \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Comment success on PR
         if: success()
